@@ -42,7 +42,7 @@ class TransactionService {
     for (final item in items) {
       if (item.product.trackStock) {
         try {
-          await SupabaseService.client.from('products').rpc('decrement_stock', params: {
+          await SupabaseService.client.rpc('decrement_stock', params: {
             'product_id': item.product.id,
             'qty': item.quantity,
           });
@@ -66,21 +66,21 @@ class TransactionService {
     DateTime? to,
     int limit = 50,
   }) async {
-    var query = SupabaseService.client
+    var filterQuery = SupabaseService.client
         .from(_table)
         .select()
-        .eq('user_id', userId)
-        .order('created_at', ascending: false)
-        .limit(limit);
+        .eq('user_id', userId);
 
     if (from != null) {
-      query = query.gte('created_at', from.toIso8601String());
+      filterQuery = filterQuery.gte('created_at', from.toIso8601String());
     }
     if (to != null) {
-      query = query.lte('created_at', to.toIso8601String());
+      filterQuery = filterQuery.lte('created_at', to.toIso8601String());
     }
 
-    final data = await query;
+    final data = await filterQuery
+        .order('created_at', ascending: false)
+        .limit(limit);
     return (data as List)
         .map((e) => TransactionModel.fromJson(e as Map<String, dynamic>))
         .toList();
