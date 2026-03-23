@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
@@ -57,7 +58,7 @@ class SupabaseService {
   static Future<String> uploadFile(String bucket, String path, List<int> bytes, String mimeType) async {
     await client.storage.from(bucket).uploadBinary(
       path,
-      bytes,
+      bytes is Uint8List ? bytes : Uint8List.fromList(bytes),
       fileOptions: FileOptions(contentType: mimeType, upsert: true),
     );
     return client.storage.from(bucket).getPublicUrl(path);
