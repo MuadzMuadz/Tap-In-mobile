@@ -23,22 +23,20 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.27.4'
           channel: 'stable'
+
+      - name: Flutter doctor
+        run: flutter doctor -v
 
       - name: Get dependencies
         run: flutter pub get
 
       - name: Build APK
-        run: |
-          flutter build apk --release \
-            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+        run: flutter build apk --release --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Rename APK
-        run: |
-          VERSION=${GITHUB_REF_NAME}
-          cp build/app/outputs/flutter-apk/app-release.apk \
-             build/app/outputs/flutter-apk/tapin-kasir-${VERSION}.apk
+        run: cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tapin-kasir-${{ github.ref_name }}.apk
 
       # ── GitHub Release ──────────────────────────────────────────────
       - name: Create GitHub Release
@@ -56,14 +54,3 @@ jobs:
             Uninstall versi lama, lalu install APK baru (data tidak hilang karena tersimpan di cloud).
           files: build/app/outputs/flutter-apk/tapin-kasir-${{ github.ref_name }}.apk
           generate_release_notes: false
-
-      # ── Firebase App Distribution ────────────────────────────────────
-      # Uncomment setelah setup Firebase (lihat README.setup.md)
-      # - name: Upload ke Firebase App Distribution
-      #   uses: wzieba/Firebase-Distribution-Github-Action@v1
-      #   with:
-      #     appId: ${{ secrets.FIREBASE_APP_ID }}
-      #     serviceCredentialsFileContent: ${{ secrets.FIREBASE_CREDENTIALS }}
-      #     groups: beta-testers
-      #     file: build/app/outputs/flutter-apk/tapin-kasir-${{ github.ref_name }}.apk
-      #     releaseNotes: "Release ${{ github.ref_name }}"
