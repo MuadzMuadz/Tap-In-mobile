@@ -1,0 +1,69 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build APK & Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: |
+          flutter build apk --release \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+
+      - name: Rename APK
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          cp build/app/outputs/flutter-apk/app-release.apk \
+             build/app/outputs/flutter-apk/tapin-kasir-${VERSION}.apk
+
+      # ── GitHub Release ──────────────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Tap-In Kasir ${{ github.ref_name }}"
+          body: |
+            ## Tap-In Kasir ${{ github.ref_name }}
+
+            ### Download
+            Unduh APK di bawah dan install di Android kamu.
+            > Pastikan "Install dari sumber tidak dikenal" sudah diaktifkan di pengaturan HP.
+
+            ### Cara Update
+            Uninstall versi lama, lalu install APK baru (data tidak hilang karena tersimpan di cloud).
+          files: build/app/outputs/flutter-apk/tapin-kasir-${{ github.ref_name }}.apk
+          generate_release_notes: false
+
+      # ── Firebase App Distribution ────────────────────────────────────
+      # Uncomment setelah setup Firebase (lihat README.setup.md)
+      # - name: Upload ke Firebase App Distribution
+      #   uses: wzieba/Firebase-Distribution-Github-Action@v1
+      #   with:
+      #     appId: ${{ secrets.FIREBASE_APP_ID }}
+      #     serviceCredentialsFileContent: ${{ secrets.FIREBASE_CREDENTIALS }}
+      #     groups: beta-testers
+      #     file: build/app/outputs/flutter-apk/tapin-kasir-${{ github.ref_name }}.apk
+      #     releaseNotes: "Release ${{ github.ref_name }}"
