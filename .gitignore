@@ -32,6 +32,7 @@ migrate_working_dir/
 android/gradlew
 android/gradlew.bat
 android/.gradle
+android/gradle/wrapper/dist/
 android/captures/
 android/local.properties
 android/GeneratedPluginRegistrant.java
