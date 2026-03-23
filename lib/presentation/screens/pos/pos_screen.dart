@@ -7,6 +7,7 @@ import '../../../data/models/product_model.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/product_provider.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../providers/profile_provider.dart';
 import '../../widgets/tap_in_logo.dart';
 import '../../widgets/product_card.dart';
 import '../../widgets/cart_panel.dart';
