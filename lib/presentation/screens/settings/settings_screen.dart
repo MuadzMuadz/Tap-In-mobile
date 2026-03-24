@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/qris_validator.dart';
+import '../../../data/models/staff_model.dart';
 import '../../../providers/profile_provider.dart';
+import '../../../providers/staff_provider.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_text_field.dart';
 import '../../widgets/toast.dart';
@@ -195,6 +197,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
               ),
 
+              const SizedBox(height: 16),
+
+              // Staff management section
+              _StaffSection(),
+
               const SizedBox(height: 32),
 
               AppButton(
@@ -282,6 +289,211 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _StaffSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final staffAsync = ref.watch(staffNotifierProvider);
+
+    return _SectionCard(
+      title: 'Manajemen Kasir',
+      icon: Icons.people_alt_rounded,
+      child: staffAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Text('Gagal memuat: $e'),
+        data: (staffList) => Column(
+          children: [
+            ...staffList.map((s) => _StaffRow(staff: s)),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => _showStaffDialog(context, ref),
+              icon: const Icon(Icons.person_add_rounded, size: 18),
+              label: const Text('Tambah Kasir'),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(44),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showStaffDialog(BuildContext context, WidgetRef ref, [StaffModel? existing]) {
+    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    final pinCtrl = TextEditingController(text: existing?.pin ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(existing == null ? 'Tambah Kasir' : 'Edit Kasir'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Nama Kasir'),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pinCtrl,
+              decoration: const InputDecoration(
+                labelText: 'PIN (4 digit)',
+                counterText: '',
+              ),
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              final pin = pinCtrl.text.trim();
+              if (name.isEmpty || pin.length != 4) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Nama dan PIN 4 digit wajib diisi')),
+                );
+                return;
+              }
+              Navigator.pop(ctx);
+              if (existing == null) {
+                await ref.read(staffNotifierProvider.notifier).add(name: name, pin: pin);
+              } else {
+                await ref.read(staffNotifierProvider.notifier).update(
+                      id: existing.id,
+                      name: name,
+                      pin: pin,
+                    );
+              }
+            },
+            child: Text(existing == null ? 'Tambah' : 'Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StaffRow extends ConsumerWidget {
+  final StaffModel staff;
+  const _StaffRow({required this.staff});
+
+  void _showEditDialog(BuildContext context, WidgetRef ref) {
+    final nameCtrl = TextEditingController(text: staff.name);
+    final pinCtrl = TextEditingController(text: staff.pin);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Kasir'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Nama Kasir'),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pinCtrl,
+              decoration: const InputDecoration(
+                  labelText: 'PIN (4 digit)', counterText: ''),
+              keyboardType: TextInputType.number,
+              maxLength: 4,
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Batal')),
+          FilledButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              final pin = pinCtrl.text.trim();
+              if (name.isEmpty || pin.length != 4) return;
+              Navigator.pop(ctx);
+              await ref.read(staffNotifierProvider.notifier).update(
+                    id: staff.id,
+                    name: name,
+                    pin: pin,
+                  );
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        radius: 18,
+        backgroundColor: AppColors.primarySurface,
+        child: Text(
+          staff.name.isNotEmpty ? staff.name[0].toUpperCase() : '?',
+          style: TextStyle(fontSize: 14, color: AppColors.primary, fontWeight: FontWeight.bold),
+        ),
+      ),
+      title: Text(staff.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(staff.isOwner ? 'Pemilik' : 'Kasir',
+          style: TextStyle(
+            fontSize: 11,
+            color: staff.isOwner ? AppColors.primary : AppColors.textTertiary,
+          )),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.edit_rounded, size: 18),
+            onPressed: () => _showEditDialog(context, ref),
+            tooltip: 'Edit',
+          ),
+          if (!staff.isOwner)
+            IconButton(
+              icon: const Icon(Icons.delete_rounded, size: 18),
+              color: AppColors.error,
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Hapus Kasir?'),
+                    content: Text('Hapus ${staff.name}?'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Batal')),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+                        child: const Text('Hapus'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await ref.read(staffNotifierProvider.notifier).remove(staff.id);
+                }
+              },
+              tooltip: 'Hapus',
+            ),
+        ],
+      ),
     );
   }
 }

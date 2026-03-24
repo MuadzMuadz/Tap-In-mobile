@@ -8,6 +8,7 @@ import '../../../providers/cart_provider.dart';
 import '../../../providers/product_provider.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/profile_provider.dart';
+import '../../../providers/staff_provider.dart';
 import '../../widgets/tap_in_logo.dart';
 import '../../widgets/product_card.dart';
 import '../../widgets/cart_panel.dart';
@@ -15,6 +16,8 @@ import '../../widgets/toast.dart';
 import '../products/product_form_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../settings/settings_screen.dart';
+import '../stock_opname/stock_opname_screen.dart';
+import '../profile/profile_screen.dart';
 import 'checkout_sheet.dart';
 
 class PosScreen extends ConsumerStatefulWidget {
@@ -168,6 +171,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   }
 
   AppBar _buildAppBar(BuildContext context, String? storeName) {
+    final activeStaff = ref.watch(activeStaffProvider);
     return AppBar(
       title: Row(
         children: [
@@ -193,23 +197,70 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           onPressed: () => _openPage(context, const DashboardScreen()),
         ),
         IconButton(
+          icon: const Icon(Icons.inventory_2_rounded, size: 20),
+          color: AppColors.textSecondary,
+          tooltip: 'Stok Opname',
+          onPressed: () => _openPage(context, const StockOpnameScreen()),
+        ),
+        IconButton(
           icon: const Icon(Icons.settings_rounded, size: 20),
           color: AppColors.textSecondary,
           tooltip: 'Pengaturan',
           onPressed: () => _openPage(context, const SettingsScreen()),
         ),
-        IconButton(
-          icon: const Icon(Icons.logout_rounded, size: 20),
-          color: AppColors.error,
-          tooltip: 'Keluar',
-          onPressed: () async {
-            final confirm = await _confirmLogout(context);
-            if (confirm == true && mounted) {
-              await ref.read(authNotifierProvider.notifier).signOut();
-            }
-          },
+        // Active staff avatar — tap to switch
+        Padding(
+          padding: const EdgeInsets.only(right: 4),
+          child: Tooltip(
+            message: activeStaff?.name ?? 'Ganti kasir',
+            child: GestureDetector(
+              onTap: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: Text('Kasir: ${activeStaff?.name ?? '-'}'),
+                    content: const Text('Ganti kasir atau keluar dari akun?'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Batal')),
+                      OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(context, false);
+                          _openPage(context, const ProfileScreen());
+                        },
+                        child: const Text('Akun'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.error),
+                        child: const Text('Keluar'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true && mounted) {
+                  // Switch staff (back to picker)
+                  ref.read(activeStaffProvider.notifier).state = null;
+                }
+              },
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: AppColors.primarySurface,
+                child: Text(
+                  activeStaff?.name.isNotEmpty == true
+                      ? activeStaff!.name[0].toUpperCase()
+                      : '?',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary),
+                ),
+              ),
+            ),
+          ),
         ),
-        const SizedBox(width: 4),
       ],
     );
   }

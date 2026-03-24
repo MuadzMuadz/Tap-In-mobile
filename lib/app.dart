@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/auth_provider.dart';
+import 'providers/staff_provider.dart';
 import 'presentation/screens/auth/login_screen.dart';
+import 'presentation/screens/auth/staff_picker_screen.dart';
 import 'presentation/screens/pos/pos_screen.dart';
 
 final _router = GoRouter(
@@ -35,17 +37,17 @@ class _AuthGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
+    final activeStaff = ref.watch(activeStaffProvider);
 
     return authState.when(
       loading: () => const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
+        body: Center(child: CircularProgressIndicator()),
       ),
       error: (_, __) => const LoginScreen(),
       data: (user) {
-        if (user != null) return const PosScreen();
-        return const LoginScreen();
+        if (user == null) return const LoginScreen();
+        if (activeStaff == null) return const StaffPickerScreen();
+        return const PosScreen();
       },
     );
   }

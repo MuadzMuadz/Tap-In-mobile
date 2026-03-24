@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../../core/utils/qris_generator.dart';
 import '../../../data/services/transaction_service.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/cart_provider.dart';
 import '../../../providers/product_provider.dart';
 import '../../../providers/profile_provider.dart';
+import '../../../providers/staff_provider.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/toast.dart';
 
@@ -23,10 +26,35 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
   bool _loading = false;
   bool _success = false;
 
+  // Cash change calculator
+  final _cashCtrl = TextEditingController();
+  double _cashGiven = 0;
+
+  // Last transaction info for WhatsApp sharing
+  String? _receiptText;
+
+  @override
+  void dispose() {
+    _cashCtrl.dispose();
+    super.dispose();
+  }
+
+  double get _change => (_cashGiven - _totalAfterDiscount).clamp(0, double.infinity);
+
+  double get _totalAfterDiscount {
+    final cart = ref.read(cartProvider);
+    return cart.total;
+  }
+
   Future<void> _processCheckout() async {
     final user = ref.read(currentUserProvider);
     final cart = ref.read(cartProvider);
     if (user == null || cart.isEmpty) return;
+
+    if (_paymentMethod == 'cash' && _cashGiven < cart.total) {
+      showToast(context, 'Uang tunai tidak cukup', ToastType.error);
+      return;
+    }
 
     setState(() => _loading = true);
     try {
@@ -37,6 +65,30 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
         discount: cart.computedDiscount,
         paymentMethod: _paymentMethod,
       );
+
+      // Build receipt text for sharing
+      final activeStaff = ref.read(activeStaffProvider);
+      final profile = ref.read(profileProvider).valueOrNull;
+      final sb = StringBuffer();
+      sb.writeln('🧾 *${profile?.storeName ?? 'TAP-In Kasir'}*');
+      sb.writeln('Kasir: ${activeStaff?.name ?? '-'}');
+      sb.writeln('─────────────────');
+      for (final item in cart.items) {
+        sb.writeln('${item.product.name} x${item.quantity}');
+        sb.writeln('  ${CurrencyFormatter.format(item.subtotal)}');
+      }
+      sb.writeln('─────────────────');
+      if (cart.computedDiscount > 0) {
+        sb.writeln('Diskon: -${CurrencyFormatter.format(cart.computedDiscount)}');
+      }
+      sb.writeln('*Total: ${CurrencyFormatter.format(cart.total)}*');
+      if (_paymentMethod == 'cash') {
+        sb.writeln('Bayar: ${CurrencyFormatter.format(_cashGiven)}');
+        sb.writeln('Kembali: ${CurrencyFormatter.format(_change)}');
+      } else {
+        sb.writeln('Metode: QRIS');
+      }
+      _receiptText = sb.toString();
 
       ref.read(cartProvider.notifier).clear();
       await ref.read(productsProvider.notifier).refresh();
@@ -50,6 +102,16 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
       if (mounted) {
         showToast(context, 'Transaksi gagal. Coba lagi.', ToastType.error);
       }
+    }
+  }
+
+  Future<void> _shareWhatsApp() async {
+    final text = _receiptText;
+    if (text == null) return;
+    final encoded = Uri.encodeComponent(text);
+    final uri = Uri.parse('https://wa.me/?text=$encoded');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -69,7 +131,6 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
         ),
         child: Column(
           children: [
-            // Handle
             const SizedBox(height: 12),
             Container(
               width: 40,
@@ -80,7 +141,6 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
               ),
             ),
             const SizedBox(height: 16),
-
             Expanded(
               child: _success
                   ? _buildSuccessView(context)
@@ -98,6 +158,12 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
     dynamic profile,
     ScrollController controller,
   ) {
+    // Build dynamic QRIS if available
+    final qrisString = profile?.qrisString as String?;
+    final dynamicQris = qrisString != null
+        ? QrisGenerator.generate(qrisString, cart.total)
+        : null;
+
     return ListView(
       controller: controller,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
@@ -116,14 +182,10 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                       children: [
                         Expanded(
                           child: Text('${item.product.name} x${item.quantity}',
-                              style: const TextStyle(
-                                  fontSize: 13, fontWeight: FontWeight.w500)),
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
                         ),
-                        Text(
-                          CurrencyFormatter.format(item.subtotal),
-                          style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w700),
-                        ),
+                        Text(CurrencyFormatter.format(item.subtotal),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                       ],
                     ),
                   )),
@@ -133,15 +195,12 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('Diskon',
-                        style: TextStyle(
-                            fontSize: 13, color: AppColors.textSecondary)),
-                    Text(
-                      '- ${CurrencyFormatter.format(cart.computedDiscount)}',
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.error),
-                    ),
+                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                    Text('- ${CurrencyFormatter.format(cart.computedDiscount)}',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.error)),
                   ],
                 ),
               const SizedBox(height: 4),
@@ -149,8 +208,7 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Total',
-                      style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w800)),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
                   Text(
                     CurrencyFormatter.format(cart.total),
                     style: const TextStyle(
@@ -193,17 +251,75 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
           ),
         ),
 
-        // QRIS display
+        // Cash change calculator
+        if (_paymentMethod == 'cash') ...[
+          const SizedBox(height: 16),
+          _Section(
+            title: 'Uang Tunai',
+            child: Column(
+              children: [
+                TextField(
+                  controller: _cashCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Uang diterima',
+                    prefixText: 'Rp ',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    isDense: true,
+                  ),
+                  onChanged: (v) {
+                    final cleaned = v.replaceAll(RegExp(r'[^0-9]'), '');
+                    setState(() => _cashGiven = double.tryParse(cleaned) ?? 0);
+                  },
+                ),
+                if (_cashGiven > 0) ...[
+                  const SizedBox(height: 12),
+                  // Quick amount buttons
+                  Wrap(
+                    spacing: 8,
+                    children: _quickAmounts(cart.total).map((amt) {
+                      return ActionChip(
+                        label: Text(CurrencyFormatter.compact(amt)),
+                        onPressed: () {
+                          setState(() => _cashGiven = amt);
+                          _cashCtrl.text = amt.toInt().toString();
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Kembalian',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                      Text(
+                        CurrencyFormatter.format(_change),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                          color: _change >= 0 ? AppColors.success : AppColors.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+
+        // QRIS display (dynamic)
         if (_paymentMethod == 'qris') ...[
           const SizedBox(height: 16),
           _Section(
             title: 'Scan QRIS',
             child: Center(
-              child: profile?.qrisString != null
+              child: dynamicQris != null
                   ? Column(
                       children: [
                         QrImageView(
-                          data: profile!.qrisString!,
+                          data: dynamicQris,
                           version: QrVersions.auto,
                           size: 200,
                           backgroundColor: Colors.white,
@@ -211,24 +327,48 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Scan QR di atas untuk membayar',
-                          style: Theme.of(context).textTheme.bodyMedium,
+                          CurrencyFormatter.format(cart.total),
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Nominal sudah otomatis terisi di QRIS',
+                          style: TextStyle(color: AppColors.textTertiary, fontSize: 12),
                         ),
                       ],
                     )
-                  : Column(
-                      children: [
-                        const Icon(Icons.qr_code_2_rounded,
-                            size: 64, color: AppColors.textTertiary),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'QRIS belum disetup.\nPergi ke Pengaturan untuk upload QRIS.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              color: AppColors.textTertiary, fontSize: 13),
+                  : qrisString != null
+                      ? Column(
+                          children: [
+                            QrImageView(
+                              data: qrisString,
+                              version: QrVersions.auto,
+                              size: 200,
+                              backgroundColor: Colors.white,
+                              padding: const EdgeInsets.all(12),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Masukkan nominal secara manual',
+                              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            const Icon(Icons.qr_code_2_rounded,
+                                size: 64, color: AppColors.textTertiary),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'QRIS belum disetup.\nPergi ke Pengaturan untuk upload QRIS.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: AppColors.textTertiary, fontSize: 13),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
             ),
           ),
         ],
@@ -245,6 +385,14 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
     );
   }
 
+  List<double> _quickAmounts(double total) {
+    final ceil = (total / 1000).ceil() * 1000.0;
+    return [ceil, ceil + 5000, ceil + 10000, ceil + 20000]
+        .where((a) => a >= total)
+        .take(4)
+        .toList();
+  }
+
   Widget _buildSuccessView(BuildContext context) {
     return Center(
       child: Column(
@@ -257,28 +405,52 @@ class _CheckoutSheetState extends ConsumerState<CheckoutSheet> {
               color: AppColors.successSurface,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.check_rounded,
-                color: AppColors.success, size: 44),
+            child: const Icon(Icons.check_rounded, color: AppColors.success, size: 44),
           ),
           const SizedBox(height: 20),
-          Text('Transaksi Berhasil!',
-              style: Theme.of(context).textTheme.headlineMedium),
+          Text('Transaksi Berhasil!', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 8),
+          if (_paymentMethod == 'cash' && _change > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Kembalian: ${CurrencyFormatter.format(_change)}',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.success,
+                ),
+              ),
+            ),
           const Text(
             'Terima kasih, pembayaran telah diterima.',
             style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.arrow_back_rounded, size: 18),
-            label: const Text('Kembali ke Kasir'),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _shareWhatsApp,
+                icon: const Icon(Icons.share_rounded, size: 18),
+                label: const Text('Share WA'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF25D366),
+                  side: const BorderSide(color: Color(0xFF25D366)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                label: const Text('Kembali ke Kasir'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -352,8 +524,7 @@ class _PaymentOption extends StatelessWidget {
         child: Column(
           children: [
             Icon(icon,
-                color: selected ? AppColors.primary : AppColors.textTertiary,
-                size: 24),
+                color: selected ? AppColors.primary : AppColors.textTertiary, size: 24),
             const SizedBox(height: 6),
             Text(
               label,
