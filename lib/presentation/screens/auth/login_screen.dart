@@ -98,7 +98,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (msg.contains('User already registered')) {
       return 'Email sudah terdaftar';
     }
-    return 'Terjadi kesalahan. Coba lagi.';
+    if (msg.contains('SocketException') || msg.contains('Failed host lookup') || msg.contains('Network')) {
+      return 'Tidak ada koneksi internet. Periksa jaringan kamu.';
+    }
+    if (msg.contains('AuthException') || msg.contains('AuthApiException')) {
+      return 'Autentikasi gagal: $msg';
+    }
+    return 'Terjadi kesalahan: $msg';
   }
 
   @override
