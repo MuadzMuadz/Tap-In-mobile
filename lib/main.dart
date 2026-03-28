@@ -14,11 +14,11 @@ void main() async {
   await Supabase.initialize(
     url: const String.fromEnvironment(
       'SUPABASE_URL',
-      defaultValue: '', // Set via --dart-define or .env at build time
+      defaultValue: 'https://uzyzqjwxaqellztmgxxy.supabase.co',
     ),
     anonKey: const String.fromEnvironment(
       'SUPABASE_ANON_KEY',
-      defaultValue: '',
+      defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eXpxand4YXFlbGx6dG1neHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4MjgzOTAsImV4cCI6MjA4NzQwNDM5MH0.IamIeYZQUHAjagmcT_cpnxww3elEtb3AVBpGHeMcRJU',
     ),
   );
 
