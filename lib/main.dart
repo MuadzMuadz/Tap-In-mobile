@@ -2,22 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'app.dart';
+
+const _supabaseUrl = String.fromEnvironment(
+  'SUPABASE_URL',
+  defaultValue: 'https://uzyzqjwxaqellztmgxxy.supabase.co',
+);
+const _supabaseAnonKey = String.fromEnvironment(
+  'SUPABASE_ANON_KEY',
+  defaultValue:
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eXpxand4YXFlbGx6dG1neHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4MjgzOTAsImV4cCI6MjA4NzQwNDM5MH0.IamIeYZQUHAjagmcT_cpnxww3elEtb3AVBpGHeMcRJU',
+);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load .env file
-  await dotenv.load(fileName: '.env');
-
   // Initialize Indonesian locale for date formatting
   await initializeDateFormatting('id_ID', null);
 
-  // Initialize Supabase from .env
+  // Initialize Supabase
   await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL'] ?? '',
-    anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
+    url: _supabaseUrl,
+    anonKey: _supabaseAnonKey,
   );
 
   runApp(
